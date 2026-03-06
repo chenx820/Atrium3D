@@ -116,6 +116,30 @@ def _cmd_stage_frames(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_animate(args: argparse.Namespace) -> int:
+    """
+    运行完整编译 + 路由 + 3D 动画生成（GIF）。
+    """
+    from atrium3d.atrium3d import Atrium3D
+
+    a = Atrium3D(
+        benchmark=args.benchmark,
+        dir=args.dir,
+        type=args.type,
+        size=args.size,
+        layers=args.layers,
+        scheduling_strategy=args.scheduling_strategy,
+    )
+    a.results_code["readout_weight"] = float(args.readout_weight)
+    # 在 solve() 里会自动调用 routing() + generate_animation()
+    a.solve(
+        simulation=False,
+        animation=True,
+        do_routing=True,
+        initial_zone=args.initial_zone,
+    )
+    return 0
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="3D-NAA project entry script (adapted for current directory structure)",
@@ -177,6 +201,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_frames.add_argument("--max_frames", type=int, default=None, help="only export first N frames (optional)")
     p_frames.add_argument("--dpi", type=int, default=250, help="PNG dpi")
     p_frames.set_defaults(func=_cmd_stage_frames)
+
+    p_anim = sub.add_parser("animate", help="run full pipeline and generate 3D routing GIF")
+    p_anim.add_argument("--benchmark", type=str, default="qft_n10", help="benchmark name (without extension)")
+    p_anim.add_argument("--dir", type=str, default="default", help="benchmark subdirectory (in benchmark/)")
+    p_anim.add_argument("--type", type=str, default="qasm", choices=["qasm", "json"], help="default benchmark file format")
+    p_anim.add_argument("--size", type=int, default=7, help="default trap grid size (for default architecture)")
+    p_anim.add_argument("--layers", type=int, default=6, help="number of layers (for default architecture)")
+    p_anim.add_argument("--scheduling_strategy", type=str, default="asap", help="scheduling strategy (currently only asap is supported)")
+    p_anim.add_argument("--initial_zone", type=str, default="storage", choices=["storage", "all"], help="initial atom location (default storage)")
+    p_anim.add_argument("--readout_weight", type=float, default=0.0, help="readout proximity heuristic weight (0 to disable)")
+    p_anim.set_defaults(func=_cmd_animate)
 
     return parser
 

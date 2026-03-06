@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 
 from atrium3d.scheduler.scheduler import scheduling
 from atrium3d.placer import place_stages, placing_3d, placing_slm
+from atrium3d.router import routing
+from atrium3d.animator import generate_animation
 
 
 class Atom:
@@ -637,9 +639,12 @@ class Atrium3D:
 
         # Routing
         if do_routing:
-            raise NotImplementedError(
-                "routing() 目前未在该仓库实现。你想要的下一步是新增 routing 模块时，我可以继续补齐。"
-            )
+            t0 = time.perf_counter()
+            self.results_code = routing(self.results_code)
+            elapsed = time.perf_counter() - t0
+            ct = self.results_code.setdefault("compilation_time", {})
+            ct["routing"] = float(elapsed)
+            ct["total"] = float(ct.get("total", 0.0) + elapsed)
 
         self.save_results()
 
@@ -649,7 +654,10 @@ class Atrium3D:
 
         # Animation
         if animation:
-            raise NotImplementedError("animate() 目前未在该仓库实现。")
+            # 若用户未显式请求 routing 但直接要求动画，则自动补跑一次 routing
+            if "routing_frames" not in self.results_code:
+                self.results_code = routing(self.results_code)
+            generate_animation(self)
         print(f"[INFO] BAM: Finish solving {self.benchmark}\n")
         return self.results_code
 
