@@ -2,15 +2,17 @@
   "benchmark": "qft_n10",
   "dir": "default",
   "compilation_time": {
-    "total": 0.0633196251001209,
-    "scheduling": 3.870902583003044e-05,
-    "initial_mapping": 0.05482620804104954,
-    "routing": 0.008454708033241332
+    "total": 0.06237395800417289,
+    "scheduling": 2.6999972760677338e-05,
+    "initial_mapping": 0.054626750003080815,
+    "routing": 0.007720208028331399
   },
   "n_qubits": 10,
   "n_stages": 20,
   "instructions": [],
   "readout_weight": 0.0,
+  "routing_steps_per_move": 15,
+  "routing_pause_frames": 5,
   "initial_mapping": {
     "0": [
       5.0,
@@ -24128,6 +24130,5 @@
         125.0
       ]
     }
-  ],
-  "routing_steps_per_move": 15
+  ]
 }

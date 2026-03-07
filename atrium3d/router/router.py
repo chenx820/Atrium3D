@@ -1,13 +1,20 @@
 import numpy as np
-from typing import Dict
+from typing import Dict, Optional
 
-def routing(results_code: Dict, steps_per_move: int = 15, pause_frames: int = 5) -> Dict:
+def routing(
+    results_code: Dict,
+    steps_per_move: Optional[int] = None,
+    pause_frames: Optional[int] = None,
+) -> Dict:
     """
     为原子生成连续的 3D 穿梭轨迹。
-    steps_per_move: 每次移动切分的插值帧数（控制飞行速度）。
-    pause_frames: 到达计算位后，悬停做门的停顿帧数（模拟打激光的时间）。
+    steps_per_move / pause_frames: 若为 None，则从 results_code 读取（可由 architecture JSON 提供）。
     """
     stage_positions = results_code.get("stage_positions", [])
+    if steps_per_move is None:
+        steps_per_move = results_code.get("routing_steps_per_move", 15)
+    if pause_frames is None:
+        pause_frames = results_code.get("routing_pause_frames", 5)
     n_qubits = results_code.get("n_qubits", 0)
 
     if not stage_positions or n_qubits == 0:
@@ -43,4 +50,5 @@ def routing(results_code: Dict, steps_per_move: int = 15, pause_frames: int = 5)
 
     results_code["routing_frames"] = routing_frames
     results_code["routing_steps_per_move"] = steps_per_move
+    results_code["routing_pause_frames"] = pause_frames
     return results_code

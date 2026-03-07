@@ -1,0 +1,16 @@
+{
+  "architecture": "default",
+  "benchmark": "qft_n10",
+  "dir": "default",
+  "type": "qasm",
+  "scheduling_strategy": "asap",
+  "initial_zone": "storage",
+  "readout_weight": 0.0,
+  "save": "architecture.png",
+  "prefix": "stage_",
+  "every": 1,
+  "max_frames": null,
+  "dpi": 150,
+  "routing_steps_per_move": 15,
+  "routing_pause_frames": 5
+}

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import math
 import random
 import time
@@ -7,7 +5,6 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 Point3 = Tuple[float, float, float]
 Gate = Tuple[int, int]
-
 
 def _ensure_compilation_time(results_code: Dict) -> Dict:
     ct = results_code.setdefault("compilation_time", {})
@@ -74,8 +71,8 @@ def _greedy_mapping_3d(
     readout_weight: float = 0.0,
 ) -> List[int]:
     """
-    qubit -> site_index 的贪心构造。
-    prefer_prefix: 一个 site_index 列表，表示更优先被选择的候选集合（比如 interaction zone）。
+    greedy construction of qubit -> site_index.
+    prefer_prefix: a site_index list, representing the candidate set that is preferred to be selected (e.g. interaction zone).
     """
     n_qubits = len(w)
     all_ranked = _sort_sites_by_centrality(sites)
@@ -176,9 +173,9 @@ def placing_3d(
     readout_weight: float = 0.0,
 ) -> Tuple[Dict, Dict[int, Point3]]:
     """
-    在 3D Atrium 架构上做初始放置：
-    - available_sites: 可放置的 3D 物理坐标 (x,y,z)
-    - preferred_sites: 可选的“优先区域”（比如 interaction zone 的 sites），用于引导贪心选点
+    Initial placement on 3D Atrium architecture:
+    - available_sites: 3D physical coordinates (x,y,z) that can be placed
+    - preferred_sites: optional "preferred region" (e.g. interaction zone sites) for guiding greedy selection
     """
     _ensure_compilation_time(results_code)
     t0 = time.perf_counter()

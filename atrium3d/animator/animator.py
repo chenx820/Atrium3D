@@ -1,32 +1,63 @@
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from matplotlib.lines import Line2D
 
-def generate_animation(compiler, save_path: str = "routing_animation.gif", fps: int = 15):
+import os
+
+def generate_animation(compiler, fps: int = 15):
     """
-    生成并保存原子的 3D 飞行穿梭动画。
-    
-    :param compiler: Atrium3D 实例对象，提供背景绘制与路由数据
-    :param save_path: 动画保存路径
-    :param fps: 动画帧率
+    Generate and save the 3D animation of atomic shuttling.
     """
     frames_data = compiler.results_code.get("routing_frames")
     if not frames_data:
         raise ValueError("[Error] No routing frames found. Make sure to run solve(do_routing=True) first.")
 
+    stage_positions = compiler.results_code.get("stage_positions", [])
+    stage_meta = compiler.results_code.get("stage_placement_meta", [])
+    steps_per_move = compiler.results_code.get("routing_steps_per_move", 15)
+    pause_frames = compiler.results_code.get("routing_pause_frames", 5)
+    n_stages = len(stage_positions)
+    frames_per_segment = (steps_per_move + pause_frames) if n_stages > 1 else 0
+    z_laser_top = (compiler.layers - 1) * compiler.spacing_z  # laser from readout plane (z) down to atom
+
+    output_dir = f"results/{compiler.results_code['dir']}/animation/"
+    os.makedirs(output_dir, exist_ok=True)
+    save_path = output_dir + compiler.benchmark + ".mp4"
+
     fig = plt.figure(figsize=(10, 12))
     ax = fig.add_subplot(projection="3d")
 
-    # 绘制静态架构背景 (利用 Compiler 内置的方法)
     compiler._plot_architecture_background(ax, alpha_storage=0.1, alpha_interaction=0.1, alpha_readout=0.1)
 
-    # 初始化动态原子的散点图
+    n_qubits = compiler.results_code["n_qubits"]
+
+    # Per-atom AOD lines: x-AOD (∥x, moves in yz) and y-AOD (∥y, moves in xz), follow each atom
+    aod_x_lines = []
+    aod_y_lines = []
+    for _ in range(n_qubits):
+        (lx,) = ax.plot([0, 0], [0, 0], [0, 0], color="deepskyblue", alpha=0.5, linewidth=2.0)
+        (ly,) = ax.plot([0, 0], [0, 0], [0, 0], color="darkorange", alpha=0.5, linewidth=2.0)
+        aod_x_lines.append(lx)
+        aod_y_lines.append(ly)
+
+    # Individual addressing lasers (from +z down to atom) when gate is applied
+    ia_laser_lines = []
+    for _ in range(n_qubits):
+        (ll,) = ax.plot([0, 0], [0, 0], [0, 0], color="gold", alpha=0.85, linewidth=2.5)
+        ia_laser_lines.append(ll)
+
     scatter = ax.scatter([], [], [], c="#d62728", s=100, edgecolors="white", linewidths=1.0, alpha=0.9)
     
-    # 预先生成所有 qubit 的 ID 文本以便在动画中移动
     texts = [ax.text(0, 0, 0, str(q), fontsize=8, color="black", weight='bold') 
-             for q in range(compiler.results_code['n_qubits'])]
+             for q in range(n_qubits)]
 
-    # 设置坐标轴标签和物理比例
+    aod_legend = [
+        Line2D([0], [0], color="deepskyblue", linewidth=2.5, alpha=0.8, label="AOD ∥ x (moves in yz)"),
+        Line2D([0], [0], color="darkorange", linewidth=2.5, alpha=0.8, label="AOD ∥ y (moves in xz)"),
+        Line2D([0], [0], color="gold", linewidth=2.5, alpha=0.85, label="Individual addressing (gate)"),
+    ]
+    ax.legend(handles=aod_legend, loc="upper left", bbox_to_anchor=(0.8, 1))
+
     ax.set_xlabel(r"X ($\mu m$)")
     ax.set_ylabel(r"Y ($\mu m$)")
     ax.set_zlabel(r"Z ($\mu m$)")
@@ -36,33 +67,82 @@ def generate_animation(compiler, save_path: str = "routing_animation.gif", fps: 
         compiler.layers * compiler.spacing_z
     ])
 
+    x_AOD_min = -0.5 * compiler.spacing_xy
+    x_AOD_max = compiler.size * compiler.spacing_xy + 0.5 * compiler.spacing_xy
+    y_AOD_min = -0.5 * compiler.spacing_xy
+    y_AOD_max = compiler.size * compiler.spacing_xy + 0.5 * compiler.spacing_xy
+
+    _eps = 1e-6  # position change threshold (µm)
+
     def update(frame_idx):
         current_positions = frames_data[frame_idx]
+        prev_positions = frames_data[frame_idx - 1] if frame_idx > 0 else None
         xs, ys, zs = [], [], []
         
-        for q in range(compiler.results_code['n_qubits']):
+        for q in range(n_qubits):
             pos = current_positions[str(q)]
-            xs.append(pos[0])
-            ys.append(pos[1])
-            zs.append(pos[2])
+            x, y, z = pos[0], pos[1], pos[2]
+            xs.append(x)
+            ys.append(y)
+            zs.append(z)
             
-            # 动态更新文本标签位置 (略微偏移以防遮挡)
-            texts[q].set_position((pos[0] + 0.5, pos[1] + 0.5))
-            texts[q].set_3d_properties(pos[2] + 0.5, 'z')
+            texts[q].set_position((x + 0.5, y + 0.5))
+            texts[q].set_3d_properties(z + 0.5, "z")
 
-        # 在 Matplotlib 中更新 3D scatter 的坐标
+            # AOD only when this atom moved (AOD is "holding" it during shuttle)
+            if prev_positions is not None:
+                prev = prev_positions[str(q)]
+                moved = (
+                    abs(prev[0] - x) > _eps
+                    or abs(prev[1] - y) > _eps
+                    or abs(prev[2] - z) > _eps
+                )
+            else:
+                moved = False
+
+            if moved:
+                aod_x_lines[q].set_visible(True)
+                aod_x_lines[q].set_data([x_AOD_min, x_AOD_max], [y, y])
+                aod_x_lines[q].set_3d_properties([z, z])
+                aod_y_lines[q].set_visible(True)
+                aod_y_lines[q].set_data([x, x], [y_AOD_min, y_AOD_max])
+                aod_y_lines[q].set_3d_properties([z, z])
+            else:
+                aod_x_lines[q].set_visible(False)
+                aod_y_lines[q].set_visible(False)
+
+        # Individual addressing lasers: only during gate (pause) phase, on qubits in two_qubit_gates
+        active_qubits_ia = set()
+        if frames_per_segment > 0 and n_stages > 1 and stage_meta:
+            segment = frame_idx // frames_per_segment
+            pos_in_seg = frame_idx % frames_per_segment
+            if pos_in_seg >= steps_per_move and segment + 1 < len(stage_meta):
+                micro_stage = segment + 1
+                meta = stage_meta[micro_stage]
+                for gate in meta.get("two_qubit_gates", []):
+                    if len(gate) >= 2:
+                        active_qubits_ia.add(int(gate[0]))
+                        active_qubits_ia.add(int(gate[1]))
+        for q in range(n_qubits):
+            if q in active_qubits_ia:
+                x, y, z = current_positions[str(q)][0], current_positions[str(q)][1], current_positions[str(q)][2]
+                ia_laser_lines[q].set_data([x, x], [y, y])
+                ia_laser_lines[q].set_3d_properties([z_laser_top, z])
+                ia_laser_lines[q].set_visible(True)
+            else:
+                ia_laser_lines[q].set_visible(False)
+
         scatter._offsets3d = (xs, ys, zs)
-        
-        # 显示进度标题
         ax.set_title(f"3D Atom Shuttling: {compiler.benchmark}\nFrame {frame_idx}/{len(frames_data)}")
         
-        return scatter, *texts
+        return scatter, *texts, *aod_x_lines, *aod_y_lines, *ia_laser_lines
 
-    print(f"[INFO] Rendering {len(frames_data)} frames... This may take a moment.")
+    print(f"[INFO] Rendering {len(frames_data)} frames to {save_path}... This may take a moment.")
     
-    # 使用 pillow 库保存 GIF
     anim = FuncAnimation(fig, update, frames=len(frames_data), interval=1000/fps, blit=False)
-    anim.save(save_path, writer='pillow', fps=fps, dpi=120)
+    
+
+    anim.save(save_path, writer='ffmpeg', fps=fps, dpi=150, extra_args=['-vcodec', 'libx264'])
     
     plt.close(fig)
-    print(f"[INFO] ✨ Animation successfully saved to: {save_path}")
+    print(f"[INFO] Animation successfully saved to: {save_path}")

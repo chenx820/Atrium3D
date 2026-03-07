@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import os
 import re
@@ -12,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from atrium3d.scheduler.scheduler import scheduling
-from atrium3d.placer import place_stages, placing_3d, placing_slm
+from atrium3d.placer import place_stages, placing_3d
 from atrium3d.router import routing
 from atrium3d.animator import generate_animation
 
@@ -30,6 +28,8 @@ class Atrium3D:
         type: str = "qasm",
         size: int = 10,
         layers: int = 4,
+        spacing_xy: float = 5.0,
+        spacing_z: float = 25.0,
         architecture: Optional[Dict] = None,
         scheduling_strategy: str = "asap",
         given_initial_mapping=None,
@@ -39,12 +39,12 @@ class Atrium3D:
         self.type = type
         self.size = size
         self.layers = layers
+        self.spacing_xy = float(spacing_xy)
+        self.spacing_z = float(spacing_z)
         self.scheduling_strategy = scheduling_strategy
         self.given_initial_mapping = given_initial_mapping
         self.grid = {}
         self.center_range = range(2, self.size - 2) # center 3x3 is the interaction zone
-        self.spacing_xy = 5.0
-        self.spacing_z = 25.0
 
         # safety radius
         self.r_route = 2.0
@@ -362,9 +362,9 @@ class Atrium3D:
 
     def get_available_3d_sites(self, initial_zone: str = "storage") -> List[Tuple[float, float, float]]:
         """
-        初始放置可用的 3D sites。
-        - storage: 只允许初始原子位于 storage_zone（你的需求：刚开始都在 storage）
-        - all: 允许 storage + interaction
+        Available 3D sites for initial placement.
+        - storage: Only allow initial atoms to be in storage_zone (your requirement: all atoms start in storage)
+        - all: Allow storage + interaction
         """
         zone = (initial_zone or "storage").lower()
         if zone == "storage":
@@ -375,10 +375,9 @@ class Atrium3D:
 
     def _default_architecture(self) -> Dict:
         """
-        当前仓库里没有 architecture/ 配置文件，因此提供一个与本项目目录结构相适配的默认架构：
-        - trap 网格大小: size x size
-        - trap 间距: spacing_xy
-        - 默认所有 trap 都可放 qubit（buffer 为空）
+        - trap grid size: size x size
+        - trap spacing: spacing_xy
+        - default all traps can place qubit (buffer is empty)
         """
         return {
             "atoms": {
@@ -419,8 +418,7 @@ class Atrium3D:
 
     def _parse_qasm_lightweight(self, qasm_str: str) -> Tuple[int, List[Tuple[int, int]]]:
         """
-        不依赖 qiskit 的轻量 QASM 解析（支持常见的 qreg/qbit 声明与两比特门提取）。
-        目标是为 scheduling+placing 提供 gate 列表，而不是完整语义执行。
+        Lightweight QASM parsing without relying on qiskit (supports common qreg/qbit declarations and two-qubit gate extraction).
         """
         # Strip comments
         lines = []
@@ -597,7 +595,7 @@ class Atrium3D:
 
         # Initial mapping
         print("[INFO] BAM: Start initial mapping")
-        # 初始都在 storage_zone：不再偏向 interaction。后续真正做门时再路由/移动到 interaction。
+        # All atoms start in storage_zone: no longer biased towards interaction. Routing/moving to interaction will be done later when actually performing gates.
         preferred = sorted(set(self.storage_zone))
         self.results_code, best_mapping = placing_3d(
             available_sites=available_3d_sites,
@@ -650,11 +648,11 @@ class Atrium3D:
 
         # Simulation
         if simulation:
-            raise NotImplementedError("simulate() 目前未在该仓库实现。")
+            raise NotImplementedError("simulate() is not implemented in this repository.")
 
         # Animation
         if animation:
-            # 若用户未显式请求 routing 但直接要求动画，则自动补跑一次 routing
+            # If user explicitly requests routing but directly requires animation, run routing again automatically
             if "routing_frames" not in self.results_code:
                 self.results_code = routing(self.results_code)
             generate_animation(self)

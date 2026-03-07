@@ -1,14 +1,12 @@
-from __future__ import annotations
-
 import math
 from typing import Dict, List, Optional, Sequence, Tuple
 
 Point3 = Tuple[float, float, float]
 Gate = Tuple[int, int]
 
-# 物理常数：双比特门作用距离 (um)
+# physical constant: distance between two qubits for two-qubit gate (um)
 GATE_DISTANCE = 2.5
-# 物理常数：两束光镊之间/两个原子之间的最小安全距离 (um)
+# physical constant: minimum safe distance between two beams/two atoms (um)
 MIN_BEAM_DIST = 1.5
 
 
@@ -45,13 +43,13 @@ def place_stages(
     enable_readout_move: bool = True,
 ) -> Tuple[List[Dict[int, Point3]], List[Dict], Dict]:
     """
-    为每个 stage 决定原子（qubit）的放置位置。
-    优化：引入了 Grid-Free Interaction Targeting via AOD Hovering。
+    Decide the placement of qubits (atoms) for each stage.
+    Optimization: introduced Grid-Free Interaction Targeting via AOD Hovering.
     """
     n_qubits = len(initial_mapping)
     current_pos: Dict[int, Point3] = {int(q): (float(p[0]), float(p[1]), float(p[2])) for q, p in initial_mapping.items()}
 
-    # 获取计算区所有的 SLM 锚点 (Anchor Sites)
+    # get all SLM anchor sites (Anchor Sites) in the computation region
     interaction_grids = _interaction_sites_grid(size, layers, center_range)
     anchor_phys_list = [(_grid_to_phys(g, spacing_xy, spacing_z), g) for g in interaction_grids]
 
@@ -61,7 +59,7 @@ def place_stages(
     stage_meta: List[Dict] = []
     total_travel = 0.0
 
-    # 引入悬停后，每个门只占用1个锚点，容量大幅提升
+    # after introducing hovering, each gate only occupies 1 anchor point, capacity is significantly increased
     interaction_cols_capacity = len(center_range) * len(center_range)
     max_gates_per_micro = max(1, interaction_cols_capacity)
 
@@ -109,7 +107,7 @@ def place_stages(
             target_pos = {}
             readout_moves_this_micro = []
 
-            # 动态列排空: 闲置原子退回 Storage 或升入 Readout
+            # dynamic column clearance: idle atoms return to Storage or move up to Readout
             for q in range(n_qubits):
                 if q not in active_q_in_micro:
                     is_finished = False
@@ -131,7 +129,7 @@ def place_stages(
             assigned_gates = []
             gate_sites = []
             
-            # 使用连续物理坐标来追踪被占用的光束列和空间位置
+            # use continuous physical coordinates to track the occupied beam columns and spatial positions
             used_xy_cols_phys: List[Tuple[float, float]] = []
             used_sites_phys: List[Point3] = []
             
@@ -151,14 +149,14 @@ def place_stages(
                 p1 = current_pos[q1]
 
                 for anchor_phys, anchor_grid in anchor_phys_list:
-                    # AOD 悬停机制: 控制原子被 AOD 夹持在距离锚点 GATE_DISTANCE 处
+                    # AOD hovering mechanism: control atoms to be held by AOD at a distance from the anchor point GATE_DISTANCE
                     hover_phys = (anchor_phys[0] + GATE_DISTANCE, anchor_phys[1], anchor_phys[2])
                     hover_grid = (anchor_grid[0] + GATE_DISTANCE / spacing_xy, anchor_grid[1], anchor_grid[2])
                     
                     col_anchor = (anchor_phys[0], anchor_phys[1])
                     col_hover = (hover_phys[0], hover_phys[1])
 
-                    # 连续空间的 Skewer/物理碰撞检测
+                    # continuous space Skewer/physical collision detection
                     conflict = False
                     for used_col in used_xy_cols_phys:
                         if math.hypot(col_anchor[0] - used_col[0], col_anchor[1] - used_col[1]) < MIN_BEAM_DIST:
@@ -174,12 +172,12 @@ def place_stages(
                             conflict = True; break
                     if conflict: continue
 
-                    # 计算搬运代价
+                    # calculate the cost of transportation
                     c1 = _euclidean3(p0, anchor_phys) + _euclidean3(p1, hover_phys)
                     c2 = _euclidean3(p0, hover_phys) + _euclidean3(p1, anchor_phys)
 
                     z_idx = anchor_grid[2]
-                    z_penalty = z_layer_usage[z_idx] * 50.0  # Z 轴防拥堵解耦惩罚
+                    z_penalty = z_layer_usage[z_idx] * 50.0  # Z-axis congestion decoupling penalty
 
                     if c1 + z_penalty < best_cost:
                         best_cost = c1 + z_penalty
@@ -202,7 +200,7 @@ def place_stages(
                     assigned_gates.append((q0, q1))
                     gate_sites.append({
                         "gate": [q0, q1],
-                        # hover_grid 是带浮点数的，但可以转换为 list 供 JSON 序列化
+                        # hover_grid has floating-point numbers, but can be converted to a list for JSON serialization
                         "sites_grid": [list(grid_a), list(grid_b)],
                         "sites_phys": [list(a_phys), list(b_phys)],
                         "swapped": bool(swapped),
@@ -214,7 +212,7 @@ def place_stages(
                     f"original_stage={orig_stage_idx}, remaining_gates={remaining_gates}"
                 )
 
-            # 更新物理位置并累加真实搬运距离
+            # update physical positions and accumulate the real transportation distance
             stage_travel = 0.0
             for q in range(n_qubits):
                 if q in target_pos:
@@ -240,7 +238,7 @@ def place_stages(
             micro_in_original += 1
             remaining_gates = [g for g in remaining_gates if g not in assigned_gates]
 
-    # 终局归位
+    # final positioning
     final_target_pos = {}
     final_readout_moves = []
     final_travel = 0.0
