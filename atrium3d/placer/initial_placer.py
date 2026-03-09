@@ -23,7 +23,7 @@ def _interaction_weights(list_full_gates: Sequence[Sequence[Gate]], n_qubits: in
         for q0, q1 in stage:
             if q0 == q1:
                 continue
-            if 0 <= q0 < n_qubits and 0 <= q1 < n_qubits:
+            else:
                 w[q0][q1] += 1
                 w[q1][q0] += 1
     return w
@@ -43,7 +43,6 @@ def _mapping_cost(
         si = sites[mapping[i]]
         if readout_weight and readout_plane_z is not None and readout_urgency is not None:
             # Earlier-finished qubits (higher urgency) should be closer (in z) to readout plane.
-            # We minimize vertical travel: (readout_plane_z - z_site) for storage layers.
             dz = max(0.0, float(readout_plane_z) - float(si[2]))
             cost += float(readout_weight) * float(readout_urgency[i]) * dz
         wi = w[i]

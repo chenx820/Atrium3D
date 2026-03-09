@@ -43,6 +43,8 @@ def _cmd_atrium3d(args: argparse.Namespace) -> int:
         layers=args.layers,
         spacing_xy=args.spacing_xy,
         spacing_z=args.spacing_z,
+        routing_steps_per_move=args.routing_steps_per_move,
+        routing_pause_frames=args.routing_pause_frames,
     )
     save_path = str(ROOT / args.save) if args.save else None
     a.visualize(save_path=save_path)
@@ -64,13 +66,13 @@ def _cmd_compile(args: argparse.Namespace) -> int:
         layers=args.layers,
         spacing_xy=args.spacing_xy,
         spacing_z=args.spacing_z,
+        routing_steps_per_move=args.routing_steps_per_move,
+        routing_pause_frames=args.routing_pause_frames,
         scheduling_strategy=args.scheduling_strategy,
     )
     # Pass readout heuristic weight via results_code to avoid widening the constructor too much.
     # (Atrium3D will pick it up in solve()).
     a.results_code["readout_weight"] = float(args.readout_weight)
-    a.results_code["routing_steps_per_move"] = int(args.routing_steps_per_move)
-    a.results_code["routing_pause_frames"] = int(args.routing_pause_frames)
     rc = a.solve(simulation=False, animation=False, do_routing=False, initial_zone=args.initial_zone)
     # Print a compact summary
     print(f"[INFO] compile done: n_qubits={rc['n_qubits']}, n_stages={rc['n_stages']}")
@@ -91,11 +93,11 @@ def _cmd_stage_frames(args: argparse.Namespace) -> int:
         layers=args.layers,
         spacing_xy=args.spacing_xy,
         spacing_z=args.spacing_z,
+        routing_steps_per_move=args.routing_steps_per_move,
+        routing_pause_frames=args.routing_pause_frames,
         scheduling_strategy=args.scheduling_strategy,
     )
     a.results_code["readout_weight"] = float(args.readout_weight)
-    a.results_code["routing_steps_per_move"] = int(args.routing_steps_per_move)
-    a.results_code["routing_pause_frames"] = int(args.routing_pause_frames)
     a.solve(simulation=False, animation=False, do_routing=False, initial_zone=args.initial_zone)
 
     out_dir = f"results/{a.results_code['dir']}/stage_frames/"
@@ -122,11 +124,11 @@ def _cmd_animate(args: argparse.Namespace) -> int:
         layers=args.layers,
         spacing_xy=args.spacing_xy,
         spacing_z=args.spacing_z,
+        routing_steps_per_move=args.routing_steps_per_move,
+        routing_pause_frames=args.routing_pause_frames,
         scheduling_strategy=args.scheduling_strategy,
     )
     a.results_code["readout_weight"] = float(args.readout_weight)
-    a.results_code["routing_steps_per_move"] = int(args.routing_steps_per_move)
-    a.results_code["routing_pause_frames"] = int(args.routing_pause_frames)
     # In solve(), routing() and generate_animation() will be called automatically.
     a.solve(
         simulation=False,

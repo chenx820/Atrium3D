@@ -30,6 +30,8 @@ class Atrium3D:
         layers: int = 4,
         spacing_xy: float = 5.0,
         spacing_z: float = 25.0,
+        routing_steps_per_move: int = 15,
+        routing_pause_frames: int = 5,
         architecture: Optional[Dict] = None,
         scheduling_strategy: str = "asap",
         given_initial_mapping=None,
@@ -41,6 +43,8 @@ class Atrium3D:
         self.layers = layers
         self.spacing_xy = float(spacing_xy)
         self.spacing_z = float(spacing_z)
+        self.routing_steps_per_move = int(routing_steps_per_move)
+        self.routing_pause_frames = int(routing_pause_frames)
         self.scheduling_strategy = scheduling_strategy
         self.given_initial_mapping = given_initial_mapping
         self.grid = {}
@@ -249,7 +253,7 @@ class Atrium3D:
 
     def visualize_micro_stage(self, micro_stage_idx: int, save_path: Optional[str] = None, show: bool = False, dpi: int = 250):
         """
-        可视化一个 micro-stage 的全局原子位置（来自 results_code['stage_positions']），并高亮本 stage 的 gate 落点与 readout move。
+        Visualize the global atom positions of a micro-stage (from results_code['stage_positions']) and highlight the gate sites and readout moves of this stage.
         """
         stage_positions = self.results_code.get("stage_positions")
         stage_meta = self.results_code.get("stage_placement_meta")
@@ -260,7 +264,6 @@ class Atrium3D:
             raise ValueError(f"[Error] micro_stage_idx out of range: {micro_stage_idx}")
 
         pos_map_raw = stage_positions[micro_stage_idx]
-        # JSON stores keys as str -> [x,y,z]
         pos_map: Dict[int, Tuple[float, float, float]] = {int(q): (float(p[0]), float(p[1]), float(p[2])) for q, p in pos_map_raw.items()}
         meta = stage_meta[micro_stage_idx]
 
