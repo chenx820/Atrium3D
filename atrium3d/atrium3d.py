@@ -539,7 +539,7 @@ class Atrium3D:
         output_path = f"{output_dir}{self.results_code['benchmark']}_code.json"
         with open(output_path, 'w') as f:
             json.dump(self.results_code, f, indent=2)
-        print(f"[INFO] BAM: Results saved to {output_path}")
+        print(f"[INFO] Atrium3D: Results saved to {output_path}")
 
     def solve(self, simulation: bool = False, animation: bool = False, do_routing: bool = False, initial_zone: str = "storage"):
         """
@@ -550,7 +550,7 @@ class Atrium3D:
             animation (bool): Whether to generate animations.
         """
 
-        print(f"[INFO] BAM: Start solving {self.benchmark}")
+        print(f"[INFO] Atrium3D: Start solving {self.benchmark}")
         # Prepare program + sites
         self.set_program()
         # 3D initial placement sites
@@ -559,9 +559,9 @@ class Atrium3D:
             raise ValueError("[Error] #qubits > #available 3D sites.")
 
         # Scheduling
-        print(f"[INFO] BAM: Start {self.scheduling_strategy.upper()} scheduling")
+        print(f"[INFO] Atrium3D: Start {self.scheduling_strategy.upper()} scheduling")
         self.results_code, list_scheduling = scheduling(g_q=self.g_q, results_code=self.results_code, scheduling_strategy=self.scheduling_strategy)        
-        print("[INFO] BAM: Scheduling finished")
+        print("[INFO] Atrium3D: Scheduling finished")
         
         list_gate = []
         for gates in list_scheduling:
@@ -597,7 +597,7 @@ class Atrium3D:
         readout_plane_z = float((self.layers - 1) * self.spacing_z)
 
         # Initial mapping
-        print("[INFO] BAM: Start initial mapping")
+        print("[INFO] Atrium3D: Start initial mapping")
         # All atoms start in storage_zone: no longer biased towards interaction. Routing/moving to interaction will be done later when actually performing gates.
         preferred = sorted(set(self.storage_zone))
         self.results_code, best_mapping = placing_3d(
@@ -615,10 +615,10 @@ class Atrium3D:
         self.results_code["readout_last_stage_2q"] = last_stage_2q
         self.results_code["readout_urgency_basis"] = "last_two_qubit_gate"
         self.results_code["readout_plane_z"] = readout_plane_z
-        print("[INFO] BAM: Initial mapping finished. Best mapping: ", best_mapping)
+        print("[INFO] Atrium3D: Initial mapping finished. Best mapping: ", best_mapping)
 
         # Stage-by-stage placement (given scheduling)
-        print("[INFO] BAM: Start stage placement")
+        print("[INFO] Atrium3D: Start stage placement")
         stage_positions, stage_meta, stage_summary = place_stages(
             initial_mapping=best_mapping,
             stages=list_gate,
@@ -636,7 +636,7 @@ class Atrium3D:
         ]
         self.results_code["stage_placement_meta"] = stage_meta
         self.results_code["stage_placement_summary"] = stage_summary
-        print("[INFO] BAM: Stage placement finished")
+        print("[INFO] Atrium3D: Stage placement finished")
 
         # Routing
         if do_routing:
@@ -659,7 +659,7 @@ class Atrium3D:
             if "routing_frames" not in self.results_code:
                 self.results_code = routing(self.results_code)
             generate_animation(self)
-        print(f"[INFO] BAM: Finish solving {self.benchmark}\n")
+        print(f"[INFO] Atrium3D: Finish solving {self.benchmark}\n")
         return self.results_code
 
 
