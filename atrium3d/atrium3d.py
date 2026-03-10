@@ -1,23 +1,21 @@
 import json
 import os
 import re
-import time
-from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 import matplotlib.pyplot as plt
 
-from atrium3d.scheduler.scheduler import scheduling
-from atrium3d.placer import place_stages, placing_3d
-from atrium3d.router import routing
-from atrium3d.animator import generate_animation
+from atrium3d.scheduler.scheduler import Scheduler
+from atrium3d.placer.placer import InitialPlacer
+from atrium3d.router.router import Router
+from atrium3d.animator.animator import Animator
 
+Point3 = Tuple[float, float, float]
 
 class Atrium3D:
     def __init__(
         self,
-        benchmark: str = "qft_n10",
+        benchmark: str,
         dir: str = "default",
         type: str = "qasm",
         size: int = 10,
@@ -48,8 +46,8 @@ class Atrium3D:
         self.readout_zone = set()
 
         # SLM trap sites for placing/routing
-        self.qubit_slm_sites: List[Tuple[float, float]] = []
-        self.buffer_slm_sites: List[Tuple[float, float]] = []
+        self.qubit_slm_sites: List[Point3] = []
+        self.buffer_slm_sites: List[Point3] = []
 
         self.architecture = architecture or self._default_architecture()
 
@@ -134,122 +132,9 @@ class Atrium3D:
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches="tight")
     
-    def visualize_initial_mapping(self, mapping=None, save_path: Optional[str] = None, show: bool = False):
-        """
-        Visualize the initial mapping.
-        Args:
-            mapping: The initial mapping.
-            save_path: The path to save the image.
-            show: Whether to show the image.
-        """
-        if mapping is None:
-            mapping = self.results_code.get("initial_mapping")
-        if not mapping:
-            raise ValueError("[Error] initial_mapping not found. Please run solve() first.")
 
-        # Determine dimensionality
-        first_key = next(iter(mapping))
-        first_val = mapping[first_key]
-        dim = len(first_val)
 
-        if dim == 2:
-            if not self.qubit_slm_sites and not self.buffer_slm_sites:
-                self.parse_slm_sites()
-
-            fig, ax = plt.subplots(figsize=(8, 8))
-            if self.qubit_slm_sites:
-                xs, ys = zip(*self.qubit_slm_sites)
-                ax.scatter(xs, ys, s=35, c="#c7c7c7", alpha=0.7, edgecolors="none", label="Qubit SLM sites")
-            if self.buffer_slm_sites:
-                bx, by = zip(*self.buffer_slm_sites)
-                ax.scatter(bx, by, s=35, facecolors="none", edgecolors="#2ca02c", linewidths=1.0, alpha=0.6, label="Buffer sites")
-
-            mx = []
-            my = []
-            for q in sorted(mapping.keys()):
-                x, y = mapping[q]
-                mx.append(float(x))
-                my.append(float(y))
-            ax.scatter(mx, my, s=110, c="#d62728", alpha=0.9, edgecolors="white", linewidths=0.8, label="Initial mapping")
-            for q in sorted(mapping.keys()):
-                x, y = mapping[q]
-                ax.text(float(x) + 0.2, float(y) + 0.2, str(q), fontsize=9, color="black")
-
-            ax.set_title(f"Initial Mapping (2D SLM) benchmark={self.benchmark}, n_qubits={self.results_code.get('n_qubits', '?')}")
-            ax.set_xlabel(r"X ($\mu m$)")
-            ax.set_ylabel(r"Y ($\mu m$)")
-            ax.set_aspect("equal", adjustable="box")
-            ax.grid(True, linestyle="--", alpha=0.25)
-            ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
-            if save_path:
-                plt.savefig(save_path, dpi=300, bbox_inches="tight")
-            if show:
-                plt.show()
-            plt.close(fig)
-            return
-
-        if dim != 3:
-            raise ValueError(f"[Error] Unsupported mapping dimensionality: {dim}")
-
-        # 3D mapping on Atrium architecture
-        fig = plt.figure(figsize=(12, 10))
-        ax = fig.add_subplot(projection="3d")
-
-        # Background architecture points
-        if self.storage_zone:
-            sx, sy, sz = zip(*sorted(self.storage_zone))
-            ax.scatter(sx, sy, sz, c="royalblue", s=30, alpha=0.25, edgecolors="none", label="Storage zone")
-        if self.interaction_zone:
-            ix, iy, iz = zip(*sorted(self.interaction_zone))
-            ax.scatter(ix, iy, iz, c="tomato", s=35, alpha=0.25, edgecolors="none", label="Interaction zone")
-        if self.readout_zone:
-            rx, ry, rz = zip(*sorted(self.readout_zone))
-            ax.scatter(rx, ry, rz, c="lightgreen", s=25, alpha=0.2, edgecolors="none", label="Readout plane")
-
-        # Highlight mapping
-        mx, my, mz = [], [], []
-        for q in sorted(mapping.keys()):
-            x, y, z = mapping[q]
-            mx.append(float(x))
-            my.append(float(y))
-            mz.append(float(z))
-        ax.scatter(mx, my, mz, c="#d62728", s=140, alpha=0.95, edgecolors="white", linewidths=0.8, label="Initial mapping (3D)")
-        for q in sorted(mapping.keys()):
-            x, y, z = mapping[q]
-            ax.text(float(x) + 0.5, float(y) + 0.5, float(z) + 0.5, str(q), fontsize=9, color="black")
-
-        ax.set_xlabel(r"X ($\mu m$)")
-        ax.set_ylabel(r"Y ($\mu m$)")
-        ax.set_zlabel(r"Z ($\mu m$)")
-        ax.set_title(f"Initial Mapping on 3D Atrium (benchmark={self.benchmark}, n_qubits={self.results_code.get('n_qubits', '?')})")
-        ax.set_box_aspect([self.size * self.spacing_xy, self.size * self.spacing_xy, self.layers * self.spacing_z])
-        ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        if show:
-            plt.show()
-        plt.close(fig)
-
-    def _plot_architecture_background(self, ax, alpha_storage: float = 0.18, alpha_interaction: float = 0.18, alpha_readout: float = 0.12):
-        """
-        Plot the architecture background.
-        Args:
-            ax: The axis to plot on.
-            alpha_storage: The alpha value for the storage zone.
-            alpha_interaction: The alpha value for the interaction zone.
-            alpha_readout: The alpha value for the readout zone.
-        """
-        if self.storage_zone:
-            sx, sy, sz = zip(*sorted(self.storage_zone))
-            ax.scatter(sx, sy, sz, c="royalblue", s=18, alpha=alpha_storage, edgecolors="none", label="Storage zone")
-        if self.interaction_zone:
-            ix, iy, iz = zip(*sorted(self.interaction_zone))
-            ax.scatter(ix, iy, iz, c="tomato", s=20, alpha=alpha_interaction, edgecolors="none", label="Interaction zone")
-        if self.readout_zone:
-            rx, ry, rz = zip(*sorted(self.readout_zone))
-            ax.scatter(rx, ry, rz, c="lightgreen", s=16, alpha=alpha_readout, edgecolors="none", label="Readout plane")
-
-    def get_available_3d_sites(self, initial_zone: str = "storage") -> List[Tuple[float, float, float]]:
+    def get_available_3d_sites(self, initial_zone: str = "storage") -> List[Point3]:
         """
         Available 3D sites for initial placement.
         - storage: Only allow initial atoms to be in storage_zone (your requirement: all atoms start in storage)
@@ -427,7 +312,7 @@ class Atrium3D:
             json.dump(self.results_code, f, indent=2)
         print(f"[INFO] Atrium3D: Results saved to {output_path}")
 
-    def solve(self, simulation: bool = False, animation: bool = False, do_routing: bool = False, initial_zone: str = "storage"):
+    def solve(self, simulation: bool = False, animation: bool = False, initial_zone: str = "storage"):
         """
         Executes the compilation pipeline, including scheduling, routing, and optional simulation or animation.
 
@@ -445,93 +330,29 @@ class Atrium3D:
             raise ValueError("[Error] #qubits > #available 3D sites.")
 
         # Scheduling
-        print(f"[INFO] Atrium3D: Start {self.scheduling_strategy.upper()} scheduling")
-        self.results_code, list_scheduling = scheduling(g_q=self.g_q, results_code=self.results_code, scheduling_strategy=self.scheduling_strategy)        
-        print("[INFO] Atrium3D: Scheduling finished")
+        print(f"--------------------------------SCHEDULING--------------------------------")
         
-        list_gate = []
-        for gates in list_scheduling:
-            tmp = [self.g_q[i] for i in gates]
-            list_gate.append(tmp)
-
-        # Readout urgency heuristic (two-qubit last-use):
-        # If a qubit finishes earlier in terms of its LAST TWO-QUBIT gate, we prefer placing it closer to readout plane
-        # so that moving it to readout after completion is faster / less blocking.
-        n_qubits = int(self.results_code.get("n_qubits", 0))
-        last_stage_2q = [-1 for _ in range(n_qubits)]
-        for s_idx, stage in enumerate(list_gate):
-            for q0, q1 in stage:
-                # Only count two-qubit gates.
-                if q0 == q1:
-                    continue
-                if 0 <= q0 < n_qubits:
-                    last_stage_2q[q0] = max(last_stage_2q[q0], s_idx)
-                if 0 <= q1 < n_qubits:
-                    last_stage_2q[q1] = max(last_stage_2q[q1], s_idx)
-
-        n_stages = max(1, int(self.results_code.get("n_stages", len(list_gate))))
-        # urgency in [0,1], higher means earlier-finished -> more urgent to be near readout
-        readout_urgency = []
-        for q in range(n_qubits):
-            ls = last_stage_2q[q]
-            if ls < 0:
-                # never used in two-qubit gates -> can be treated as "finish immediately"
-                readout_urgency.append(1.0)
-            else:
-                readout_urgency.append(float((n_stages - 1 - ls) / max(1, n_stages - 1)))
-
-        readout_plane_z = float((self.layers - 1) * self.spacing_z)
-
-        # Initial mapping
-        print("[INFO] Atrium3D: Start initial mapping")
-        # All atoms start in storage_zone: no longer biased towards interaction. Routing/moving to interaction will be done later when actually performing gates.
-        preferred = sorted(set(self.storage_zone))
-        self.results_code, best_mapping = placing_3d(
-            available_sites=available_3d_sites,
-            preferred_sites=preferred,
+        scheduler = Scheduler(
             results_code=self.results_code,
-            list_full_gates=list_gate,
-            qubits_mapping=self.given_initial_mapping,
-            readout_plane_z=readout_plane_z,
-            readout_urgency=readout_urgency,
-            readout_weight=float(self.results_code.get("readout_weight", 0.0)),
+            g_q=self.g_q,
         )
-        self.results_code["initial_zone"] = initial_zone
-        self.results_code["readout_urgency"] = readout_urgency
-        self.results_code["readout_last_stage_2q"] = last_stage_2q
-        self.results_code["readout_urgency_basis"] = "last_two_qubit_gate"
-        self.results_code["readout_plane_z"] = readout_plane_z
-        print("[INFO] Atrium3D: Initial mapping finished. Best mapping: ", best_mapping)
-
-        # Stage-by-stage placement (given scheduling)
-        print("[INFO] Atrium3D: Start stage placement")
-        stage_positions, stage_meta, stage_summary = place_stages(
-            initial_mapping=best_mapping,
-            stages=list_gate,
-            size=self.size,
-            layers=self.layers,
-            center_range=self.center_range,
-            spacing_xy=float(self.spacing_xy),
-            spacing_z=float(self.spacing_z),
-            last_stage_2q=last_stage_2q,
-            enable_readout_move=True,
-        )
-        # JSON-friendly serialization
-        self.results_code["stage_positions"] = [
-            {str(q): [p[0], p[1], p[2]] for q, p in stage_map.items()} for stage_map in stage_positions
-        ]
-        self.results_code["stage_placement_meta"] = stage_meta
-        self.results_code["stage_placement_summary"] = stage_summary
-        print("[INFO] Atrium3D: Stage placement finished")
+        if self.scheduling_strategy == "asap":
+            scheduler.asap()
+            list_full_gates = scheduler.get_list_gates()
+            self.results_code = scheduler.results_code
+        else:
+            raise ValueError(f"[Error] Unsupported scheduling strategy: {self.scheduling_strategy!r}")
+        
 
         # Routing
-        if do_routing:
-            t0 = time.perf_counter()
-            self.results_code = routing(self.results_code)
-            elapsed = time.perf_counter() - t0
-            ct = self.results_code.setdefault("compilation_time", {})
-            ct["routing"] = float(elapsed)
-            ct["total"] = float(ct.get("total", 0.0) + elapsed)
+        print(f"----------------------------PLACING & ROUTING----------------------------")
+        router = Router(
+            results_code=self.results_code,
+            sites=[self.storage_zone, self.interaction_zone, self.readout_zone],
+            list_full_gates=list_full_gates,
+            initial_mapping=self.given_initial_mapping,
+        )
+        router.route_qubits()
 
         self.save_results()
 
@@ -541,10 +362,8 @@ class Atrium3D:
 
         # Animation
         if animation:
-            # If user explicitly requests routing but directly requires animation, run routing again automatically
-            if "routing_frames" not in self.results_code:
-                self.results_code = routing(self.results_code)
-            generate_animation(self)
+            animator = Animator(results_code=self.results_code)
+            animator.animate()
         print(f"[INFO] Atrium3D: Finish solving {self.benchmark}\n")
         return self.results_code
 

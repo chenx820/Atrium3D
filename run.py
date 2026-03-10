@@ -72,8 +72,7 @@ def _cmd_compile(args: argparse.Namespace) -> int:
     )
     # Pass readout heuristic weight via results_code to avoid widening the constructor too much.
     # (Atrium3D will pick it up in solve()).
-    a.results_code["readout_weight"] = float(args.readout_weight)
-    rc = a.solve(simulation=False, animation=False, do_routing=False, initial_zone=args.initial_zone)
+    rc = a.solve(simulation=False, animation=False, initial_zone=args.initial_zone)
     # Print a compact summary
     print(f"[INFO] compile done: n_qubits={rc['n_qubits']}, n_stages={rc['n_stages']}")
     return 0
@@ -97,8 +96,7 @@ def _cmd_stage_frames(args: argparse.Namespace) -> int:
         routing_pause_frames=args.routing_pause_frames,
         scheduling_strategy=args.scheduling_strategy,
     )
-    a.results_code["readout_weight"] = float(args.readout_weight)
-    a.solve(simulation=False, animation=False, do_routing=False, initial_zone=args.initial_zone)
+    a.solve(simulation=False, animation=False, initial_zone=args.initial_zone)
 
     return 0
 
@@ -119,12 +117,10 @@ def _cmd_animate(args: argparse.Namespace) -> int:
         routing_pause_frames=args.routing_pause_frames,
         scheduling_strategy=args.scheduling_strategy,
     )
-    a.results_code["readout_weight"] = float(args.readout_weight)
-    # In solve(), routing() and generate_animation() will be called automatically.
+    # In solve(), routing() and animate() will be called automatically.
     a.solve(
         simulation=False,
         animation=True,
-        do_routing=True,
         initial_zone=args.initial_zone,
     )
     return 0
@@ -141,7 +137,6 @@ OPTIONS = {
     "spacing_z": (float, 25.0, "Z spacing (µm) between layers"),
     "scheduling_strategy": (str, "asap", "scheduling strategy"),
     "initial_zone": (str, "storage", "initial atom zone", {"choices": ["storage", "all"]}),
-    "readout_weight": (float, 0.0, "readout proximity heuristic weight"),
     "routing_steps_per_move": (int, 15, "interpolation steps per move"),
     "routing_pause_frames": (int, 5, "pause frames at gate"),
     "save": (str, "architecture.png", "output image path (atrium3d)"),
@@ -181,7 +176,7 @@ def build_parser(config: dict | None = None) -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=False)
 
     atrium_opts = ["size", "layers", "spacing_xy", "spacing_z", "benchmark", "dir", "type", "save"]
-    run_opts = ["benchmark", "dir", "type", "size", "layers", "spacing_xy", "spacing_z", "scheduling_strategy", "initial_zone", "readout_weight", "routing_steps_per_move", "routing_pause_frames"]
+    run_opts = ["benchmark", "dir", "type", "size", "layers", "spacing_xy", "spacing_z", "scheduling_strategy", "initial_zone", "routing_steps_per_move", "routing_pause_frames"]
     frames_extra = ["out_dir", "prefix", "every", "max_frames", "dpi"]
 
     p_atrium = sub.add_parser("atrium3d", help="generate 3D architecture diagram")
