@@ -2,7 +2,6 @@ import json
 import os
 import re
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -14,11 +13,6 @@ from atrium3d.placer import place_stages, placing_3d
 from atrium3d.router import routing
 from atrium3d.animator import generate_animation
 
-
-class Atom:
-    def __init__(self, atom_id, grid_pos):
-        self.id = atom_id
-        self.grid_pos = grid_pos
 
 class Atrium3D:
     def __init__(
@@ -47,12 +41,7 @@ class Atrium3D:
         self.routing_pause_frames = int(routing_pause_frames)
         self.scheduling_strategy = scheduling_strategy
         self.given_initial_mapping = given_initial_mapping
-        self.grid = {}
-        self.center_range = range(2, self.size - 2) # center 3x3 is the interaction zone
-
-        # safety radius
-        self.r_route = 2.0
-        self.r_gate = 12.0  # 近似 Rydberg blockade 半径 (um)
+        self.center_range = range(2, self.size - 2) # center area is the interaction zone
 
         self.storage_zone = set()
         self.interaction_zone = set()
@@ -75,7 +64,6 @@ class Atrium3D:
                     else:
                         zone = "Storage"
                     self.get_zone(zone, x, y, z)
-                    self.grid[(x, y, z)] = Atom(f"{zone}_{x}_{y}_{z}", (x, y, z))
 
         self.results_code = {
             'benchmark': benchmark,
@@ -148,9 +136,11 @@ class Atrium3D:
     
     def visualize_initial_mapping(self, mapping=None, save_path: Optional[str] = None, show: bool = False):
         """
-        可视化 `initial_mapping`。
-        - 若映射是 (x,y)：画 2D SLM trap
-        - 若映射是 (x,y,z)：画 3D Atrium 架构并高亮 qubit 初始位置
+        Visualize the initial mapping.
+        Args:
+            mapping: The initial mapping.
+            save_path: The path to save the image.
+            show: Whether to show the image.
         """
         if mapping is None:
             mapping = self.results_code.get("initial_mapping")
@@ -241,6 +231,14 @@ class Atrium3D:
         plt.close(fig)
 
     def _plot_architecture_background(self, ax, alpha_storage: float = 0.18, alpha_interaction: float = 0.18, alpha_readout: float = 0.12):
+        """
+        Plot the architecture background.
+        Args:
+            ax: The axis to plot on.
+            alpha_storage: The alpha value for the storage zone.
+            alpha_interaction: The alpha value for the interaction zone.
+            alpha_readout: The alpha value for the readout zone.
+        """
         if self.storage_zone:
             sx, sy, sz = zip(*sorted(self.storage_zone))
             ax.scatter(sx, sy, sz, c="royalblue", s=18, alpha=alpha_storage, edgecolors="none", label="Storage zone")
@@ -250,118 +248,6 @@ class Atrium3D:
         if self.readout_zone:
             rx, ry, rz = zip(*sorted(self.readout_zone))
             ax.scatter(rx, ry, rz, c="lightgreen", s=16, alpha=alpha_readout, edgecolors="none", label="Readout plane")
-
-    def visualize_micro_stage(self, micro_stage_idx: int, save_path: Optional[str] = None, show: bool = False, dpi: int = 250):
-        """
-        Visualize the global atom positions of a micro-stage (from results_code['stage_positions']) and highlight the gate sites and readout moves of this stage.
-        """
-        stage_positions = self.results_code.get("stage_positions")
-        stage_meta = self.results_code.get("stage_placement_meta")
-        if not stage_positions or not stage_meta:
-            raise ValueError("[Error] stage placement not found. Please run solve() first.")
-
-        if micro_stage_idx < 0 or micro_stage_idx >= len(stage_positions):
-            raise ValueError(f"[Error] micro_stage_idx out of range: {micro_stage_idx}")
-
-        pos_map_raw = stage_positions[micro_stage_idx]
-        pos_map: Dict[int, Tuple[float, float, float]] = {int(q): (float(p[0]), float(p[1]), float(p[2])) for q, p in pos_map_raw.items()}
-        meta = stage_meta[micro_stage_idx]
-
-        active_qubits = set()
-        for g in meta.get("two_qubit_gates", []):
-            if len(g) == 2:
-                active_qubits.add(int(g[0]))
-                active_qubits.add(int(g[1]))
-
-        fig = plt.figure(figsize=(12, 10))
-        ax = fig.add_subplot(projection="3d")
-
-        self._plot_architecture_background(ax)
-
-        # Plot qubits
-        inactive_x, inactive_y, inactive_z = [], [], []
-        active_x, active_y, active_z = [], [], []
-        for q in sorted(pos_map.keys()):
-            x, y, z = pos_map[q]
-            if q in active_qubits:
-                active_x.append(x); active_y.append(y); active_z.append(z)
-            else:
-                inactive_x.append(x); inactive_y.append(y); inactive_z.append(z)
-
-        if inactive_x:
-            ax.scatter(inactive_x, inactive_y, inactive_z, c="#7f7f7f", s=45, alpha=0.55, edgecolors="white", linewidths=0.4, label="Qubits (inactive)")
-        if active_x:
-            ax.scatter(active_x, active_y, active_z, c="#d62728", s=95, alpha=0.95, edgecolors="white", linewidths=0.8, label="Qubits (active)")
-
-        # Label active qubits only (avoid clutter)
-        for q in sorted(active_qubits):
-            if q in pos_map:
-                x, y, z = pos_map[q]
-                ax.text(x + 0.5, y + 0.5, z + 0.5, str(q), fontsize=9, color="black")
-
-        # Draw gate site links in interaction zone
-        for gs in meta.get("gate_sites", []):
-            pts = gs.get("sites_phys")
-            if not pts or len(pts) != 2:
-                continue
-            (x0, y0, z0), (x1, y1, z1) = (pts[0], pts[1])
-            ax.plot([x0, x1], [y0, y1], [z0, z1], c="#ffbf00", linewidth=3, alpha=0.9)
-            ax.scatter([x0, x1], [y0, y1], [z0, z1], c="#ffbf00", s=55, alpha=0.95, edgecolors="black", linewidths=0.4)
-
-        # Draw readout moves
-        for mv in meta.get("readout_moves", []):
-            fr = mv.get("from")
-            to = mv.get("to")
-            if not fr or not to:
-                continue
-            ax.plot([fr[0], to[0]], [fr[1], to[1]], [fr[2], to[2]], c="#2ca02c", linewidth=2.5, alpha=0.9)
-
-        ax.set_xlabel(r"X ($\mu m$)")
-        ax.set_ylabel(r"Y ($\mu m$)")
-        ax.set_zlabel(r"Z ($\mu m$)")
-        ax.set_box_aspect([self.size * self.spacing_xy, self.size * self.spacing_xy, self.layers * self.spacing_z])
-
-        title = f"Micro-stage {meta.get('micro_stage', micro_stage_idx)} (orig stage={meta.get('original_stage','?')}, travel={meta.get('travel_distance',0):.2f})"
-        ax.set_title(title)
-        ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
-
-        if save_path:
-            plt.savefig(save_path, dpi=int(dpi), bbox_inches="tight")
-        if show:
-            plt.show()
-        plt.close(fig)
-
-    def save_all_micro_stage_images(
-        self,
-        out_dir: str | Path,
-        prefix: str = "stage_",
-        every: int = 1,
-        max_frames: Optional[int] = None,
-        dpi: int = 250,
-    ) -> List[str]:
-        """
-        导出所有 micro-stage 的 PNG 图到 out_dir。
-        返回生成的文件路径列表。
-        """
-        stage_positions = self.results_code.get("stage_positions")
-        stage_meta = self.results_code.get("stage_placement_meta")
-        if not stage_positions or not stage_meta:
-            raise ValueError("[Error] stage placement not found. Please run solve() first.")
-
-        out_path = Path(out_dir)
-        out_path.mkdir(parents=True, exist_ok=True)
-
-        n = len(stage_positions)
-        step = max(1, int(every))
-        limit = n if max_frames is None else min(n, int(max_frames))
-
-        generated: List[str] = []
-        for i in range(0, limit, step):
-            fname = f"{prefix}{i:04d}.png"
-            fpath = str(out_path / fname)
-            self.visualize_micro_stage(i, save_path=fpath, show=False, dpi=dpi)
-            generated.append(fpath)
-        return generated
 
     def get_available_3d_sites(self, initial_zone: str = "storage") -> List[Tuple[float, float, float]]:
         """

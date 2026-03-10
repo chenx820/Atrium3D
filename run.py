@@ -100,15 +100,6 @@ def _cmd_stage_frames(args: argparse.Namespace) -> int:
     a.results_code["readout_weight"] = float(args.readout_weight)
     a.solve(simulation=False, animation=False, do_routing=False, initial_zone=args.initial_zone)
 
-    out_dir = f"results/{a.results_code['dir']}/stage_frames/"
-    generated = a.save_all_micro_stage_images(
-        out_dir=out_dir,
-        prefix=args.prefix,
-        every=args.every,
-        max_frames=args.max_frames,
-        dpi=args.dpi,
-    )
-    print(f"[INFO] generated {len(generated)} frames in {out_dir}")
     return 0
 
 
